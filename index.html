@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lobotomy Corp - Punishing Bird Room</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #222; }
+        canvas { display: block; }
+        #info {
+            position: absolute; top: 10px; width: 100%;
+            text-align: center; color: white;
+            font-family: sans-serif; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Click and Drag to look around | Scroll to Zoom</div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // 1. SCENE & CAMERA
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x9cb0a4);
+        scene.fog = new THREE.Fog(0x9cb0a4, 12, 30);
+
+        const camera = new THREE.PerspectiveCamera(
+            60, window.innerWidth / window.innerHeight, 0.1, 1000
+        );
+        camera.position.set(0, 2.5, 8);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 2, -3);
+        controls.update();
+
+        // 2. LIGHTING
+        scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+        const spotLight = new THREE.SpotLight(0xffffff, 150);
+        spotLight.position.set(0, 8, 2);
+        spotLight.angle = Math.PI / 3;
+        spotLight.penumbra = 0.6;
+        spotLight.castShadow = true;
+        spotLight.shadow.mapSize.set(2048, 2048);
+        scene.add(spotLight);
+
+        // 3. PROCEDURAL TEXTURES
+        function createHazardStripeTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#e8c35d';
+            ctx.fillRect(0, 0, 512, 512);
+
+            ctx.fillStyle = '#222222';
+            ctx.beginPath();
+
+            for (let i = -512; i < 512; i += 128) {
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i + 512, 512);
+                ctx.lineTo(i + 512 + 64, 512);
+                ctx.lineTo(i + 64, 0);
+            }
+
+            ctx.fill();
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        function createNumberTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#e0e5e0';
+            ctx.fillRect(0, 0, 256, 256);
+            ctx.fillStyle = '#222222';
+            ctx.font = 'bold 180px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('27', 128, 128);
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // 4. ROOM GEOMETRY
+        const roomWidth = 16;
+        const roomHeight = 10;
+        const roomDepth = 16;
+
+        const wallMat = new THREE.MeshStandardMaterial({
+            color: 0x9cb0a4, roughness: 0.9
+        });
+
+        // Floor
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(roomWidth, roomDepth),
+            new THREE.MeshStandardMaterial({
+                color: 0x8c9c90, roughness: 0.8
+            })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Back wall
+        const backWall = new THREE.Mesh(
+            new THREE.BoxGeometry(roomWidth, roomHeight, 0.5),
+            wallMat
+        );
+        backWall.position.set(0, roomHeight / 2, -roomDepth / 2);
+        backWall.receiveShadow = true;
+        scene.add(backWall);
+
+        // Side walls
+        const sideWallGeo = new THREE.BoxGeometry(0.5, roomHeight, roomDepth);
+
+        const leftWall = new THREE.Mesh(sideWallGeo, wallMat);
+        leftWall.position.set(-roomWidth / 2, roomHeight / 2, 0);
+        leftWall.receiveShadow = true;
+        scene.add(leftWall);
+
+        const rightWall = new THREE.Mesh(sideWallGeo, wallMat);
+        rightWall.position.set(roomWidth / 2, roomHeight / 2, 0);
+        rightWall.receiveShadow = true;
+        scene.add(rightWall);
+
+        // Center floor hazard stripes
+        const stripeMatMain = new THREE.MeshStandardMaterial({
+            map: createHazardStripeTexture()
+        });
+        stripeMatMain.map.repeat.set(2, 8);
+
+        const floorStripeMain = new THREE.Mesh(
+            new THREE.PlaneGeometry(4, 16),
+            stripeMatMain
+        );
+        floorStripeMain.rotation.x = -Math.PI / 2;
+        floorStripeMain.position.set(0, 0.01, 0);
+        floorStripeMain.receiveShadow = true;
+        scene.add(floorStripeMain);
+
+        // Left-wall hazard stripe
+        const stripeMatLeft = new THREE.MeshStandardMaterial({
+            map: createHazardStripeTexture()
+        });
+        stripeMatLeft.map.repeat.set(4, 0.8);
+
+        const leftBarrier = new THREE.Mesh(
+            new THREE.BoxGeometry(0.2, 0.4, roomDepth),
+            stripeMatLeft
+        );
+        leftBarrier.position.set(-7.6, 1.5, 0);
+        leftBarrier.castShadow = true;
+        scene.add(leftBarrier);
+
+        // Back door and sign
+        const doorMat = new THREE.MeshStandardMaterial({
+            map: createHazardStripeTexture()
+        });
+        doorMat.map.repeat.set(1.5, 2);
+
+        const doorGeo = new THREE.BoxGeometry(3.5, 5, 0.2);
+
+        const door = new THREE.Mesh(doorGeo, doorMat);
+        door.position.set(0, 2.5, -7.7);
+        door.receiveShadow = true;
+        scene.add(door);
+
+        // Duplicate the door on the opposite side of the back wall.
+        const outerDoor = new THREE.Mesh(doorGeo, doorMat);
+        outerDoor.position.set(0, 2.5, -8.3);
+        outerDoor.receiveShadow = true;
+        scene.add(outerDoor);
+
+        // Original sign remains above the interior door
+        const sign = new THREE.Mesh(
+            new THREE.PlaneGeometry(2.5, 2.5),
+            new THREE.MeshStandardMaterial({
+                map: createNumberTexture()
+            })
+        );
+        sign.position.set(0, 6.5, -7.7);
+        scene.add(sign);
+
+        // Right vault door
+        const vaultGroup = new THREE.Group();
+
+        const doorBody = new THREE.Mesh(
+            new THREE.BoxGeometry(2, 3.5, 0.2),
+            new THREE.MeshStandardMaterial({
+                color: 0x556B2F, roughness: 0.6, metalness: 0.4
+            })
+        );
+        vaultGroup.add(doorBody);
+
+        const frame = new THREE.Mesh(
+            new THREE.BoxGeometry(2.2, 3.7, 0.1),
+            new THREE.MeshStandardMaterial({
+                color: 0x333333, metalness: 0.8
+            })
+        );
+        frame.position.z = -0.05;
+        vaultGroup.add(frame);
+
+        const glassWindow = new THREE.Mesh(
+            new THREE.CircleGeometry(0.4, 32),
+            new THREE.MeshStandardMaterial({
+                color: 0x88ffff, emissive: 0x44aaaa, roughness: 0.1
+            })
+        );
+        glassWindow.position.set(0, 0.8, 0.11);
+        vaultGroup.add(glassWindow);
+
+        const glassRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.45, 0.05, 16, 32),
+            new THREE.MeshStandardMaterial({ color: 0x222222 })
+        );
+        glassRing.position.set(0, 0.8, 0.12);
+        vaultGroup.add(glassRing);
+
+        const handle = new THREE.Mesh(
+            new THREE.TorusGeometry(0.25, 0.05, 16, 32),
+            new THREE.MeshStandardMaterial({ color: 0x222222 })
+        );
+        handle.position.set(0, -0.4, 0.12);
+        vaultGroup.add(handle);
+
+        const handleBar = new THREE.Mesh(
+            new THREE.BoxGeometry(0.08, 0.4, 0.08),
+            new THREE.MeshStandardMaterial({ color: 0x222222 })
+        );
+        handleBar.rotation.z = Math.PI / 4;
+        handleBar.position.set(0, -0.4, 0.15);
+        vaultGroup.add(handleBar);
+
+        vaultGroup.position.set(7.6, 2, -2);
+        vaultGroup.rotation.y = -Math.PI / 2;
+        scene.add(vaultGroup);
+
+        // 5. LEFT PIPES & GREEN BOXES
+        const metalMat = new THREE.MeshStandardMaterial({
+            color: 0x6a7a70, metalness: 0.6, roughness: 0.4
+        });
+        const greenBoxMat = new THREE.MeshStandardMaterial({
+            color: 0x98c898, roughness: 0.7
+        });
+
+        const vPipe = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.15, 0.15, 8, 16),
+            metalMat
+        );
+        vPipe.position.set(-6.8, 4, -7.6);
+        scene.add(vPipe);
+
+        const hPipe = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.15, 0.15, 3, 16),
+            metalMat
+        );
+        hPipe.rotation.z = Math.PI / 2;
+        hPipe.position.set(-5.5, 4, -7.6);
+        scene.add(hPipe);
+
+        const largeGreenBox = new THREE.Mesh(
+            new THREE.BoxGeometry(3, 2.5, 0.5),
+            greenBoxMat
+        );
+        largeGreenBox.position.set(-5.5, 6, -7.5);
+        scene.add(largeGreenBox);
+
+        const smallGreenBox = new THREE.Mesh(
+            new THREE.BoxGeometry(1.5, 1.5, 0.5),
+            greenBoxMat
+        );
+        smallGreenBox.position.set(-4.8, 3.5, -7.5);
+        scene.add(smallGreenBox);
+
+        // THIN BLACK PIPE
+        const backBlackPipe = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.15, 0.15, 10, 16),
+            new THREE.MeshStandardMaterial({ color: 0x222222 })
+        );
+        backBlackPipe.position.set(4.8, 5, -7.6); 
+        backBlackPipe.castShadow = true;
+        scene.add(backBlackPipe);
+
+        // Back wall mirrors
+        const windowGeo = new THREE.PlaneGeometry(1.2, 1.2);
+        const mirrorMat = new THREE.MeshStandardMaterial({
+            color: 0x111111, metalness: 1.0, roughness: 0.1
+        });
+
+        for (let i = 0; i < 3; i++) {
+            const win = new THREE.Mesh(windowGeo, mirrorMat);
+            win.position.set(2.5 + i * 1.8, 7.5, -7.7);
+            scene.add(win);
+        }
+
+        // 6. BLUE PIPES & RED VALVE ON LEFT WALL
+        const lightBlueMat = new THREE.MeshStandardMaterial({
+            color: 0xaadddd, metalness: 0.4, roughness: 0.5
+        });
+        const redMat = new THREE.MeshStandardMaterial({
+            color: 0xcc4444, metalness: 0.2, roughness: 0.7
+        });
+
+        const rightPipeGroup = new THREE.Group();
+
+        const rPipeV = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.2, 0.2, 6, 16),
+            lightBlueMat
+        );
+        rPipeV.position.set(0, 1, 0);
+        rightPipeGroup.add(rPipeV);
+
+        const rPipeH = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.2, 0.2, 3, 16),
+            lightBlueMat
+        );
+        rPipeH.rotation.x = Math.PI / 2;
+        rPipeH.position.set(0, 2.5, -1.5);
+        rightPipeGroup.add(rPipeH);
+
+        const redValve = new THREE.Mesh(
+            new THREE.BoxGeometry(0.6, 0.8, 0.6),
+            redMat
+        );
+        redValve.position.set(0, 0.5, 0);
+        rightPipeGroup.add(redValve);
+
+        rightPipeGroup.position.set(-7.6, 4, -5);
+        rightPipeGroup.rotation.y = Math.PI / 2;
+        scene.add(rightPipeGroup);
+
+        // 7. TANKS ON RIGHT
+        const tankBase = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.8, 0.8, 2, 32),
+            metalMat
+        );
+        tankBase.position.set(3, 1, -7);
+        scene.add(tankBase);
+
+        const tankGlass = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.7, 0.7, 3, 32),
+            new THREE.MeshStandardMaterial({
+                color: 0x4a90e2, emissive: 0x113355, roughness: 0.2
+            })
+        );
+        tankGlass.position.set(3, 3.5, -7);
+        scene.add(tankGlass);
+
+        const tankTop = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.8, 0.8, 1, 32),
+            metalMat
+        );
+        tankTop.position.set(3, 5.5, -7);
+        scene.add(tankTop);
+
+        // 8. JAGGED BLACK BRANCH WITH STUMP
+        const branchGroup = new THREE.Group();
+        const branchMat = new THREE.MeshStandardMaterial({
+            color: 0x111111, roughness: 0.9
+        });
+
+        const stump = new THREE.Mesh(
+            new THREE.CylinderGeometry(1.2, 1.8, 0.8, 8),
+            branchMat
+        );
+        stump.position.set(-5, 0.4, -3);
+        stump.castShadow = true;
+        branchGroup.add(stump);
+
+        const branchPoints = [
+            new THREE.Vector3(-5, 0.8, -3),
+            new THREE.Vector3(-2, 2.5, -3),
+            new THREE.Vector3(-1, 2, -3),
+            new THREE.Vector3(1, 3.5, -3),
+            new THREE.Vector3(2, 3.8, -3),
+            new THREE.Vector3(4, 4, -3)
+        ];
+
+        for (let i = 0; i < branchPoints.length - 1; i++) {
+            const start = branchPoints[i];
+            const end = branchPoints[i + 1];
+            const distance = start.distanceTo(end);
+
+            const cylinder = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.08, 0.12, distance, 8),
+                branchMat
+            );
+
+            cylinder.position.copy(start).lerp(end, 0.5);
+            cylinder.quaternion.setFromUnitVectors(
+                new THREE.Vector3(0, 1, 0),
+                end.clone().sub(start).normalize()
+            );
+            cylinder.castShadow = true;
+            branchGroup.add(cylinder);
+        }
+
+        scene.add(branchGroup);
+
+        // 9. LOAD PUNISHING BIRD
+        const loader = new GLTFLoader();
+        let bird; // Variable to hold the bird for animation
+
+        loader.load(
+            './source/PunishingBird.gltf',
+            (gltf) => {
+                bird = gltf.scene;
+                bird.position.set(4, 4.1, -3);
+                bird.scale.set(0.4, 0.4, 0.4);
+
+                bird.traverse((node) => {
+                    if (node.isMesh) {
+                        node.castShadow = true;
+                        node.receiveShadow = true;
+                    }
+                });
+
+                scene.add(bird);
+            },
+            undefined,
+            (error) => console.error('Error loading bird.', error)
+        );
+
+        // -----------------------------------------------------
+        // NEW ADDITIONS: VENTILATION SQUARES
+        // -----------------------------------------------------
+        const ventFrameMat = new THREE.MeshStandardMaterial({ color: 0xe0e5e0 }); 
+        const ventHoleMat = new THREE.MeshStandardMaterial({ color: 0x111111 }); 
+
+        for (let i = 0; i < 4; i++) {
+            const frameBox = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.5, 0.1), ventFrameMat);
+            
+            const holeCircle = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.12, 32), ventHoleMat);
+            holeCircle.rotation.x = Math.PI / 2; 
+            holeCircle.position.y = -0.01; 
+
+            const ventUnit = new THREE.Group();
+            ventUnit.add(frameBox);
+            ventUnit.add(holeCircle);
+            ventUnit.position.set(7.6, 8.5, -6.5 + (i * 2.6)); 
+            ventUnit.rotation.y = -Math.PI / 2;
+            scene.add(ventUnit);
+        }
+
+        // 10. DUST PARTICLES
+        const particleCount = 300;
+        const particlesGeo = new THREE.BufferGeometry();
+        const posArray = new Float32Array(particleCount * 3);
+
+        for (let i = 0; i < particleCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 16;
+        }
+
+        particlesGeo.setAttribute(
+            'position',
+            new THREE.BufferAttribute(posArray, 3)
+        );
+
+        const particlesMat = new THREE.PointsMaterial({
+            size: 0.03,
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.2
+        });
+
+        const particlesMesh = new THREE.Points(
+            particlesGeo,
+            particlesMat
+        );
+        particlesMesh.position.y = 4;
+        scene.add(particlesMesh);
+
+        // 11. ANIMATION LOOP
+        const clock = new THREE.Clock();
+        const initialBirdY = 4.1; // Store the start height to bob around it
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            const elapsedTime = clock.getElapsedTime();
+
+            // Bird floating animation
+            if (bird) {
+                // Math.sin creates a smooth wave, multiplying it controls how high it floats
+                bird.position.y = initialBirdY + Math.sin(elapsedTime * 3) * 0.1;
+            }
+
+            particlesMesh.rotation.y += 0.0005;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // 12. RESIZE
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
