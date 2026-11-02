@@ -308,17 +308,7 @@
         backBlackPipe.castShadow = true;
         scene.add(backBlackPipe);
 
-        // Back wall mirrors
-        const windowGeo = new THREE.PlaneGeometry(1.2, 1.2);
-        const mirrorMat = new THREE.MeshStandardMaterial({
-            color: 0x111111, metalness: 1.0, roughness: 0.1
-        });
-
-        for (let i = 0; i < 3; i++) {
-            const win = new THREE.Mesh(windowGeo, mirrorMat);
-            win.position.set(2.5 + i * 1.8, 7.5, -7.7);
-            scene.add(win);
-        }
+        // (Removed the 3 back wall mirrors/black boxes here)
 
         // 6. BLUE PIPES & RED VALVE ON LEFT WALL
         const lightBlueMat = new THREE.MeshStandardMaterial({
@@ -426,7 +416,7 @@
 
         // 9. LOAD PUNISHING BIRD
         const loader = new GLTFLoader();
-        let bird; // Variable to hold the bird for animation
+        let bird; 
 
         loader.load(
             './source/PunishingBird.gltf',
@@ -499,7 +489,7 @@
 
         // 11. ANIMATION LOOP
         const clock = new THREE.Clock();
-        const initialBirdY = 4.1; // Store the start height to bob around it
+        const initialBirdY = 4.1;
 
         function animate() {
             requestAnimationFrame(animate);
@@ -507,9 +497,7 @@
             const delta = clock.getDelta();
             const elapsedTime = clock.getElapsedTime();
 
-            // Bird floating animation
             if (bird) {
-                // Math.sin creates a smooth wave, multiplying it controls how high it floats
                 bird.position.y = initialBirdY + Math.sin(elapsedTime * 3) * 0.1;
             }
 
